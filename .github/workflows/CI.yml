@@ -1,118 +1,145 @@
-name: CI Pipeline
+name: CI Pipeline (Local Runner)
 
-# on:
-#  push:
-#    branches: [ "main" ]
 on:
-  workflow_dispatch:  # <-- manual trigger only
+  workflow_dispatch:  # manual trigger (you can enable 'push' later if needed)
 
 jobs:
   compile:
+    name: Compile Java Project
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: maven
+
       - name: Build with Maven
-        run: mvn -B package --file pom.xml
+        run: mvn -B clean package --file pom.xml
 
   security-check:
+    name: 🔒 Security Scan
     runs-on: self-hosted
     needs: compile
     steps:
       - uses: actions/checkout@v4
-      - name: Install Trivy and Scan
+
+      # ⚡ Local optimization:
+      # Install tools once, cache them if possible (or preinstall them on your local runner)
+      - name: Install Trivy
         run: |
-          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update -y
-          sudo apt-get install -y trivy
-          trivy fs --format table -o fs-report.json .
+          if ! command -v trivy &>/dev/null; then
+            echo "Installing Trivy..."
+            brew install aquasecurity/trivy/trivy || \
+            (sudo apt-get update -y && sudo apt-get install -y wget apt-transport-https gnupg lsb-release && \
+            wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add - && \
+            echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list && \
+            sudo apt-get update -y && sudo apt-get install -y trivy)
+          fi
+          trivy fs --exit-code 0 --format table -o fs-report.json .
+
       - name: Gitleaks
-        run: sudo apt install gitleaks -y && gitleaks detect source . -r gitleaks-report.json -f json
+        run: |
+          if ! command -v gitleaks &>/dev/null; then
+            echo "Installing Gitleaks..."
+            brew install gitleaks || sudo apt install -y gitleaks
+          fi
+          gitleaks detect --source . --report-path gitleaks-report.json --format json
 
   test:
+    name: Run Unit Tests
     runs-on: self-hosted
     needs: security-check
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: maven
-      - name: Unit Test Cases
+
+      - name: Unit Tests
         run: mvn test
 
   build_project_and_sonar_scan:
+    name: 🔍 SonarQube Analysis
     runs-on: self-hosted
     needs: test
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: maven
+
       - name: Build Project
-        run: mvn package
+        run: mvn clean package -DskipTests
+
       - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-jar
           path: target/*.jar
+
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v5.3.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
 
-      - name: SonarQube Quality Gate check
+      - name: SonarQube Quality Gate
         id: sonarqube-quality-gate-check
         uses: sonarsource/sonarqube-quality-gate-action@master
         with:
           pollingTimeoutSec: 600
         env:
-         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-         SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
 
   builds_docker_image_and_push:
+    name: 🐳 Build & Push Docker Image
     runs-on: self-hosted
     needs: build_project_and_sonar_scan
     steps:
       - uses: actions/checkout@v4
+
       - name: Download JAR artifact
         uses: actions/download-artifact@v4
         with:
           name: app-jar
           path: app
+
+      # 🧩 Local optimization:
+      # On your local runner, Docker is already installed — no need for setup if you have it.
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      
-      - name: Set up QEMU
+
+      - name: Set up QEMU (for multi-arch builds)
+        if: runner.os == 'Linux'
         uses: docker/setup-qemu-action@v3
         with:
-         platforms: all
-         image: tonistiigi/binfmt:latest 
-      
+          platforms: all
+          image: tonistiigi/binfmt:latest
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           install: true
           use: true
           driver-opts: image=moby/buildkit:latest
-     
-      - name: Build and Push Docker image
+
+      - name: Build and Push Docker Image
         uses: docker/build-push-action@v6
         with:
           context: .

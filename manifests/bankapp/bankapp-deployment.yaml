@@ -24,13 +24,16 @@ spec:
           env:
             - name: SPRING_DATASOURCE_URL
               value: jdbc:mysql://mysql.devproject.svc.cluster.local:3306/bankappdb
+
             - name: SPRING_DATASOURCE_USERNAME
               value: root
+
             - name: SPRING_DATASOURCE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: mysql-secret
                   key: MYSQL_ROOT_PASSWORD
+
 ---
 apiVersion: v1
 kind: Service

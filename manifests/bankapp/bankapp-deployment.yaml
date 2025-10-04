@@ -3,6 +3,8 @@ kind: Deployment
 metadata:
   name: demo-app
   namespace: demo-app
+  labels:
+    app: demo-app
 spec:
   replicas: 1
   selector:
@@ -15,20 +17,20 @@ spec:
     spec:
       containers:
         - name: demo-app
-          image: karty11/bankapp:latest   # your Docker Hub image
+          image: karty11/bankapp:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:
             - name: SPRING_DATASOURCE_URL
-              value: jdbc:mysql://mysql.devproject.svc.cluster.local:3306/bankapp
+              value: jdbc:mysql://mysql.devproject.svc.cluster.local:3306/bankappdb
             - name: SPRING_DATASOURCE_USERNAME
               value: root
             - name: SPRING_DATASOURCE_PASSWORD
-              value: Test@123
-            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
-              value: update
-            - name: SPRING_JPA_DATABASE_PLATFORM
-              value: org.hibernate.dialect.MySQLDialect
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_ROOT_PASSWORD
 ---
 apiVersion: v1
 kind: Service
@@ -41,8 +43,6 @@ spec:
   ports:
     - port: 80
       targetPort: 8080
-      protocol: TCP
-  type: ClusterIP
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress

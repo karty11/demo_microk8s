@@ -63,10 +63,11 @@ jobs:
       # Step 5: Log in to ArgoCD
       - name: Log in to ArgoCD
         run: |
-          ~/.local/bin/argocd login ${{ secrets.ARGOCD_SERVER }} \
-            --username admin \
-            --password "${{ secrets.ARGOCD_PASSWORD }}" \
-            --insecure
+           ~/.local/bin/argocd login "${{ secrets.ARGOCD_SERVER }}" \
+           --username admin \
+           --password "${{ secrets.ARGOCD_PASSWORD }}" \
+           --insecure
+
 
       # Step 6: Apply ArgoCD Application manifest
       - name: Apply ArgoCD application manifest

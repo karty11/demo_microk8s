@@ -27,33 +27,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # # ⚡ Local optimization:
-      # # Install tools once, cache them if possible (or preinstall them on your local runner)
-      # - name: Install Trivy
-      #   run: |
-      #     if ! command -v trivy &>/dev/null; then
-      #       echo "Installing Trivy..."
-      #       brew install aquasecurity/trivy/trivy || \
-      #       (sudo apt-get update -y && sudo apt-get install -y wget apt-transport-https gnupg lsb-release && \
-      #       wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add - && \
-      #       echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list && \
-      #       sudo apt-get update -y && sudo apt-get install -y trivy)
-      #     fi
-      #     trivy fs --exit-code 0 --format table -o fs-report.json .
-      - name: Install Trivy (M1 compatible)
+      # ⚡ Local optimization:
+      # Install tools once, cache them if possible (or preinstall them on your local runner)
+      - name: Install Trivy
         run: |
-         if ! command -v trivy &>/dev/null; then
-         echo "Installing Trivy for ARM..."
-         arch -arm64 brew install aquasecurity/trivy/trivy || \
-         (echo "Trying fallback via apt..." && \
-         sudo apt-get update -y && \
-         sudo apt-get install -y wget apt-transport-https gnupg lsb-release && \
-         wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add - && \
-         echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list && \
-         sudo apt-get update -y && \
-         sudo apt-get install -y trivy)
-         fi
-
+          if ! command -v trivy &>/dev/null; then
+            echo "Installing Trivy..."
+            brew install aquasecurity/trivy/trivy || \
+            (sudo apt-get update -y && sudo apt-get install -y wget apt-transport-https gnupg lsb-release && \
+            wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add - && \
+            echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list && \
+            sudo apt-get update -y && sudo apt-get install -y trivy)
+          fi
+          trivy fs --exit-code 0 --format table -o fs-report.json .
+  
       - name: Gitleaks
         run: |
           if ! command -v gitleaks &>/dev/null; then

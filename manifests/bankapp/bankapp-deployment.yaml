@@ -13,22 +13,23 @@ spec:
       labels:
         app: demo-app
     spec:
+      initContainers:
+        - name: wait-for-mysql
+          image: busybox
+          command: ['sh', '-c', 'until nc -z mysql.devproject.svc.cluster.local 3306; do echo waiting for mysql; sleep 5; done;']
       containers:
-      - name: demo-app
-        image: karty11/newbankapp:latest
-        ports:
-        - containerPort: 8080
-        env:
-         - name: SPRING_DATASOURCE_URL
-           value: jdbc:mysql://mysql.devproject.svc.cluster.local:3306/bankdb
-         - name: SPRING_DATASOURCE_USERNAME
-           value: root
-         - name: SPRING_DATASOURCE_PASSWORD
-           value: Test@123
-         - name: SPRING_JPA_HIBERNATE_DDL_AUTO
-           value: update
-         - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME
-           value: com.mysql.cj.jdbc.Driver
+        - name: demo-app
+          image: karty11/newbankapp:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:mysql://mysql.devproject.svc.cluster.local:3306/bankdb
+            - name: SPRING_DATASOURCE_USERNAME
+              value: root
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: secretpassword
+
 
 ---
 apiVersion: v1

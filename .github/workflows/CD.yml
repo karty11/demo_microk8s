@@ -1,67 +1,54 @@
 name: CD Pipeline - Deploy to MicroK8s via ArgoCD and Helm
-
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
     paths:
-      - 'charts/**'
-      - 'argocd/**'
-
+      - charts/**
+      - argocd/**
 jobs:
   cd-deploy:
     name: Continuous Deployment to MicroK8s
     runs-on: self-hosted
-
     steps:
-      # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # Step 2: Set up kubectl
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: 'latest'
-
-      # Step 3: Set up ArgoCD CLI
-      - name: Install ArgoCD CLI
-        run: |
-          curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          sudo install -m 555 argocd /usr/local/bin/argocd
-          argocd version --client
-
-      # Step 4: Configure Kubeconfig (connect to MicroK8s)
-      # Assuming you added the KUBECONFIG content as a GitHub secret
-      - name: Configure kubeconfig for MicroK8s
+      - name: Sync kubeconfig from MicroK8s VM
         run: |
           mkdir -p ~/.kube
-          echo "${{ secrets.MICROK8S_KUBECONFIG }}" > ~/.kube/config
+          multipass exec microk8s-vm -- microk8s config > ~/.kube/config
           chmod 600 ~/.kube/config
           kubectl get nodes
+      - name: Verify kube context
+        run: |
+          kubectl config current-context
+          kubectl cluster-info
+      - name: Install ArgoCD CLI
+        run: >
+          if [[ $(uname -m) == "arm64" ]]; then
+            curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-darwin-arm64
+          else
+            curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          fi
 
-      # Step 5: Log in to ArgoCD (ArgoCD must be exposed via Ingress or NodePort)
+          sudo install -m 555 argocd /usr/local/bin/argocd
+
+          argocd version --client
       - name: Log in to ArgoCD
         run: |
           argocd login ${{ secrets.ARGOCD_SERVER }} \
             --username admin \
             --password "${{ secrets.ARGOCD_PASSWORD }}" \
             --insecure
-
-      # Step 6: Create/Update ArgoCD Application
       - name: Apply ArgoCD application manifest
         run: |
           kubectl apply -f argocd/app.yaml
-
-      # Step 7: Sync the application (Force refresh)
-      - name: Sync application in ArgoCD
+          echo "ArgoCD Application manifest applied."
+      - name: Sync and Wait for Application
         run: |
-          argocd app sync demo-app
+          argocd app sync demo-app --timeout 300
           argocd app wait demo-app --health --timeout 300
-
-      # Step 8: Verify deployment in MicroK8s
-      - name: Verify deployment
+      - name: Verify deployment in MicroK8s
         run: |
           kubectl get pods -n demo-app
           kubectl get svc -n demo-app
           kubectl get ingress -n demo-app
+

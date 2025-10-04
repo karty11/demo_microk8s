@@ -62,6 +62,7 @@ metadata:
   labels:
     app: mysql
 spec:
+  type: ClusterIP
   selector:
     app: mysql
   ports:

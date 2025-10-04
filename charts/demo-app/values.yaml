@@ -1,0 +1,13 @@
+image:
+  repository: docker.io/karty11/newbankapp
+  tag: latest
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ingress:
+  enabled: true
+  host: demo.local
+  path: /

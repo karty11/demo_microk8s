@@ -6,9 +6,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: 'https://github.com/karty11/demo_microk8s.git'
+    repoURL: https://github.com/karty11/demo_microk8s.git
     targetRevision: main
-    path: charts/demo-app
+    path: manifests
   destination:
     server: https://kubernetes.default.svc
     namespace: demo-app
@@ -16,3 +16,5 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

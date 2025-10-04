@@ -41,13 +41,25 @@ jobs:
           fi
           trivy fs --exit-code 0 --format table -o fs-report.json .
   
-      - name: Gitleaks
+      # - name: Gitleaks
+      #   run: |
+      #     if ! command -v gitleaks &>/dev/null; then
+      #       echo "Installing Gitleaks..."
+      #       brew install gitleaks || sudo apt install -y gitleaks
+      #     fi
+      #     gitleaks detect --source . --report-path gitleaks-report.json --format json
+      - name: Gitleaks Scan
         run: |
-          if ! command -v gitleaks &>/dev/null; then
+         if ! command -v gitleaks &>/dev/null; then
             echo "Installing Gitleaks..."
-            brew install gitleaks || sudo apt install -y gitleaks
-          fi
-          gitleaks detect --source . --report-path gitleaks-report.json --format json
+            arch -arm64 brew install gitleaks || sudo apt install -y gitleaks
+         fi
+
+         # Run the scan with new flags
+         echo "Running Gitleaks..."
+         gitleaks detect --source . --report-format json --report-path gitleaks-report.json --no-banner
+
+
 
   test:
     name: Run Unit Tests

@@ -13,24 +13,22 @@ spec:
       labels:
         app: demo-app
     spec:
-      initContainers:
-        - name: wait-for-mysql
-          image: busybox
-          command: ['sh', '-c', 'until nc -z mysql.devproject.svc.cluster.local 3306; do echo waiting for mysql; sleep 5; done;']
       containers:
         - name: demo-app
-          image: karty11/newbankapp:latest
+          image: karty11/bankapp:latest   # your Docker Hub image
           ports:
             - containerPort: 8080
           env:
             - name: SPRING_DATASOURCE_URL
-              value: jdbc:mysql://mysql.devproject.svc.cluster.local:3306/bankdb
+              value: jdbc:mysql://mysql.devproject.svc.cluster.local:3306/bankapp
             - name: SPRING_DATASOURCE_USERNAME
               value: root
             - name: SPRING_DATASOURCE_PASSWORD
               value: Test@123
-
-
+            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+              value: update
+            - name: SPRING_JPA_DATABASE_PLATFORM
+              value: org.hibernate.dialect.MySQLDialect
 ---
 apiVersion: v1
 kind: Service
@@ -41,8 +39,10 @@ spec:
   selector:
     app: demo-app
   ports:
-  - port: 80
-    targetPort: 8080
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -52,14 +52,15 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
+  ingressClassName: public
   rules:
-  - host: demo.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: demo-app
-            port:
-              number: 80
+    - host: demo.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-app
+                port:
+                  number: 80

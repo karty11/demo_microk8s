@@ -1,89 +1,76 @@
-name: CD Pipeline - Deploy to MicroK8s via ArgoCD and Helm
-
-on:
-  workflow_dispatch:
-    paths:
-      - charts/**
-      - argocd/**
-
-jobs:
-  cd-deploy:
-    name: Continuous Deployment to MicroK8s
-    runs-on: self-hosted
-
-    steps:
-      # Step 1: Checkout repository
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # Step 2: Sync kubeconfig from MicroK8s VM (ensures latest IP/config)
-      - name: Sync kubeconfig from MicroK8s VM
-        run: |
-          mkdir -p ~/.kube
-          multipass exec microk8s-vm -- microk8s config > ~/.kube/config
-          chmod 600 ~/.kube/config
-          kubectl get nodes
-
-      # Step 3: Verify Kubernetes context
-      - name: Verify kube context
-        run: |
-          kubectl config current-context
-          kubectl cluster-info
-
-      # Step 4: Install ArgoCD CLI (cross-platform safe)
-      - name: Install ArgoCD CLI
-        run: |
-          set -e
-          ARCH=$(uname -m)
-          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-
-          echo "Detected OS: $OS, Arch: $ARCH"
-
-          # Pick correct binary
-          if [[ "$OS" == "darwin" && "$ARCH" == "arm64" ]]; then
-            URL="https://github.com/argoproj/argo-cd/releases/latest/download/argocd-darwin-arm64"
-          elif [[ "$OS" == "darwin" ]]; then
-            URL="https://github.com/argoproj/argo-cd/releases/latest/download/argocd-darwin-amd64"
-          else
-            URL="https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64"
-          fi
-
-          echo "Downloading ArgoCD CLI from: $URL"
-          curl -sSL -o /tmp/argocd "$URL"
-          chmod +x /tmp/argocd
-
-          # Install to a writable path (no sudo needed)
-          mkdir -p ~/.local/bin
-          mv /tmp/argocd ~/.local/bin/argocd
-          export PATH="$HOME/.local/bin:$PATH"
-
-          echo "Verifying installation..."
-          ~/.local/bin/argocd version --client
-
-      # Step 5: Log in to ArgoCD
-      - name: Log in to ArgoCD
-        run: |
-           ~/.local/bin/argocd login "${{ secrets.ARGOCD_SERVER }}" \
-           --username admin \
-           --password "${{ secrets.ARGOCD_PASSWORD }}" \
-           --insecure
+name: CD - Deploy to microk8s
+runs-on: [self-hosted, k8s-deployer]
 
 
-      # Step 6: Apply ArgoCD Application manifest
-      - name: Apply ArgoCD application manifest
-        run: |
-          kubectl apply -f argocd/app.yaml
-          echo "ArgoCD Application manifest applied."
+steps:
+- name: Checkout
+  uses: actions/checkout@v4
 
-      # Step 7: Sync and Wait for Application
-      - name: Sync and Wait for Application
-        run: |
-          ~/.local/bin/argocd app sync demo-app --timeout 300
-          ~/.local/bin/argocd app wait demo-app --health --timeout 300
 
-      # Step 8: Verify Deployment in MicroK8s
-      - name: Verify deployment in MicroK8s
-        run: |
-          kubectl get pods -n demo-app
-          kubectl get svc -n demo-app
-          kubectl get ingress -n demo-app
+- name: Ensure kubectl is available
+  run: |
+   kubectl version --client
+
+
+- name: Ensure helm is available
+  run: |
+   helm version
+
+
+- name: Install / Upgrade ArgoCD into cluster
+  run: |
+   kubectl create ns argocd --dry-run=client -o yaml | kubectl apply -f -
+   helm repo add argo https://argoproj.github.io/argo-helm
+   helm repo update
+   helm upgrade --install argocd argo/argo-cd -n argocd \
+     --set server.service.type=ClusterIP \
+     --wait --timeout 5m
+
+
+- name: Install External Secrets Operator (optional)
+  run: |
+   helm repo add external-secrets https://charts.external-secrets.io
+   helm repo update
+   kubectl create ns external-secrets --dry-run=client -o yaml | kubectl apply -f -
+   helm upgrade --install external-secrets external-secrets/external-secrets -n external-secrets --wait --timeout 5m
+
+
+- name: Install Vault (dev mode) using Helm
+  run: |
+    kubectl create ns vault --dry-run=client -o yaml | kubectl apply -f -
+    helm repo add hashicorp https://helm.releases.hashicorp.com
+    helm repo update
+    helm upgrade --install vault hashicorp/vault -n vault \
+     --wait --timeout 5m \
+     --values infra/vault/vault-helm-values.yaml
+
+
+- name: Deploy MSSQL for local dev
+  run: |
+    kubectl apply -f infra/mssql/mssql-statefulset.yaml
+
+
+- name: Create Vault root token secret (dev only) and run Vault init Job
+  run: |
+    # vault helm values sets devRootToken in a secret name `vault-root` in the vault ns
+    kubectl apply -f infra/vault/vault-token-secret.yaml || true
+    kubectl apply -f infra/vault/vault-init-job.yaml
+    # Wait for job completion
+    kubectl -n vault wait --for=condition=complete job/vault-init --timeout=120s || true
+    kubectl -n vault get job,vault,svc
+
+
+- name: Create ArgoCD Application for java-backend
+  run: |
+   kubectl apply -f infra/argocd/app-java-backend.yaml
+
+
+- name: Sync ArgoCD Application (force)
+  run: |
+    kubectl -n argocd run -i --rm argocd-cli --image=argoproj/argocd:v2.8.3 --restart=Never -- \
+
+  sh -c "argocd --help || true"
+
+- name: Show pods
+  run: |
+   kubectl get pods --all-namespaces -o wide

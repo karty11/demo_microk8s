@@ -37,29 +37,27 @@ jobs:
 
      - name: Install CSI Secrets Store Driver + AWS Provider
        run: |
-        echo "🔹 Adding Helm repositories..."
+        echo "Adding Helm repositories..."
         helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts || true
         helm repo add aws-secrets-manager https://aws.github.io/secrets-store-csi-driver-provider-aws || true
         helm repo update
 
-        echo "🔹 Installing Secrets Store CSI Driver..."
+        echo "Installing Secrets Store CSI Driver..."
         helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
           --namespace kube-system --create-namespace \
           --set enableSecretRotation=true \
           --set rotationPollInterval="1h" \
           --wait --timeout 5m
 
-        echo "🔹 Removing old ServiceAccount to avoid Helm ownership conflict..."
+        echo "Removing old ServiceAccount to avoid Helm ownership conflict..."
         kubectl delete sa secrets-store-csi-driver -n kube-system --ignore-not-found=true
 
-        echo "🔹 Installing AWS Secrets Manager Provider..."
-        helm upgrade --install csi-secrets-provider-aws aws-secrets-manager/secrets-store-csi-driver-provider-aws \
-          --namespace kube-system \
-          --set serviceAccount.create=true \
-          --set serviceAccount.name=secrets-store-csi-driver \
-          --wait --timeout 5m
+        echo "Installing AWS Secrets Manager Provider (manifest)..."
+        kubectl apply -f https://raw.githubusercontent.com/aws/secrets-store-csi-driver-provider-aws/main/deployment/aws-provider-installer.yaml
+        echo "Waiting for AWS provider pods..."
+        kubectl -n kube-system rollout status daemonset/csi-secrets-store-provider-aws --timeout=2m
 
-        echo "✅ Verifying installation..."
+        echo "Verifying installation..."
         kubectl -n kube-system get pods -l "app=secrets-store-csi-driver" || true
         kubectl -n kube-system get pods -l "app=csi-secrets-store-provider-aws" || true
 

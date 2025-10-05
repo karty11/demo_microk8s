@@ -71,3 +71,11 @@ jobs:
      - name: Show pods
        run: |
          kubectl get pods --all-namespaces -o wide
+
+     - name: Validate AWS secret mount via test pod
+       run: |
+         kubectl apply -f infra/aws-csi/test-pod.yaml
+         kubectl wait --for=condition=Ready pod/aws-secret-test --timeout=60s
+         kubectl exec -it aws-secret-test -- ls /mnt/secrets
+         kubectl exec -it aws-secret-test -- cat /mnt/secrets/SPRING_DATASOURCE_USERNAME
+         kubectl delete pod aws-secret-test     

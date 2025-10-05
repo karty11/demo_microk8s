@@ -1,9 +1,7 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: csi-aws-provider-sa
-  namespace: kube-system
-  annotations:
-    # EKS IRSA example: replace with your IAM role ARN annotation key value for your cluster
-    # For EKS: eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>
-    eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/secrets-provider-role"
+name: csi-aws-provider-sa
+namespace: kube-system
+annotations:
+eks.amazonaws.com/role-arn: "arn:aws:iam::439499528500:role/secrets-provider-role"

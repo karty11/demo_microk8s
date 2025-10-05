@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: 'https://github.com/karty11/demo_microk8s.git'  
     targetRevision: HEAD
-    path: charts/java-backend
+    path: charts/demo-app
     helm:
       valueFiles:
       - values.yaml

@@ -48,6 +48,14 @@ jobs:
        run: |
         kubectl apply -f infra/aws-csi/sa-aws-provider.yaml
 
+     - name: secrets
+       run: |
+        kubectl create namespace mssql || true
+        kubectl create secret generic mssql-sa-secret \
+         --from-literal=SA_PASSWORD='YourStrong!Passw0rd' \
+         -n mssql
+  
+
       # If running outside EKS, optionally create aws-creds secret (DO NOT store real creds in repo)
 
       # kubectl apply -f infra/aws-csi/aws-creds-secret-example.yaml

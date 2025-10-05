@@ -4,4 +4,4 @@ metadata:
 name: csi-aws-provider-sa
 namespace: kube-system
 annotations:
-eks.amazonaws.com/role-arn: "arn:aws:iam::439499528500:role/secrets-provider-role"
+   eks.amazonaws.com/role-arn: "arn:aws:iam::439499528500:role/secrets-provider-role"

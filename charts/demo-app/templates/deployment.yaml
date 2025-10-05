@@ -1,41 +1,37 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-name: {{ include "java-backend.fullname" . }}
-labels:
-app: {{ include "java-backend.name" . }}
+  name: {{ include "java-backend.fullname" . }}
+  labels:
+    app: {{ include "java-backend.name" . }}
 spec:
-replicas: {{ .Values.replicaCount }}
-selector:
-matchLabels:
-app: {{ include "java-backend.name" . }}
-template:
-metadata:
-labels:
-app: {{ include "java-backend.name" . }}
-annotations:
-{{- if .Values.vault.enabled }}
-vault.hashicorp.com/agent-inject: "true"
-vault.hashicorp.com/role: "{{ .Values.vault.k8sRole }}"
-vault.hashicorp.com/agent-inject-secret-dbcreds: "database/creds/{{ .Values.vault.dbRole }}"
-vault.hashicorp.com/agent-inject-template-dbcreds: |
-{{- with secret "database/creds/{{ .Values.vault.dbRole }}" -}}
-SPRING_DATASOURCE_USERNAME={{ .Data.username }}
-SPRING_DATASOURCE_PASSWORD={{ .Data.password }}
-{{- end }}
-{{- end }}
-spec:
-serviceAccountName: java-backend-sa
-containers:
-- name: java-backend
-image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-imagePullPolicy: {{ .Values.image.pullPolicy }}
-ports:
-- containerPort: 8080
-command: ["/bin/sh", "-c"]
-args:
-- |
-if [ -f /vault/secrets/dbcreds ]; then
-export $(cat /vault/secrets/dbcreds | xargs)
-fi
-exec java -jar /app/app.jar
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "java-backend.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "java-backend.name" . }}
+    spec:
+      serviceAccountName: java-backend-sa
+      containers:
+      - name: java-backend
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - secretRef:
+            name: java-db-secret         # secret created by SecretProviderClass secretObjects
+        volumeMounts:
+        - name: secrets-store
+          mountPath: /mnt/secrets        # AWS secrets will be available here as files
+          readOnly: true
+      volumes:
+      - name: secrets-store
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "aws-secrets"

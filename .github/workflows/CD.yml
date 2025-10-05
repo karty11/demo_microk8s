@@ -75,7 +75,7 @@ jobs:
      
      - name: Install Stakater Reloader
        run: |
-         helm repo add stakater https://stakater.github.io/stakater-helm3
+         helm repo add stakater https://stakater.github.io/stakater-charts
          helm repo update
          helm upgrade --install reloader stakater/reloader \
           --namespace kube-system --create-namespace \

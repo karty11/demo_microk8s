@@ -62,17 +62,6 @@ jobs:
         kubectl -n kube-system get pods -l "app=csi-secrets-store-provider-aws" || true
 
 
-          
-     # - name: Install AWS provider (ASCP)
-     #   run: |
-     #    helm repo add aws-secrets-manager
-     #    https://aws.github.io/secrets-store-csi-driver-provider-aws
-
-     #    helm repo update
-
-     #    helm upgrade --install csi-secrets-provider-aws aws-secrets-manager/secrets-store-csi-driver-provider-aws \
-     #     --namespace kube-system --wait --timeout 5m
-     
      - name: Install Stakater Reloader
        run: |
          helm repo add stakater https://stakater.github.io/stakater-charts
@@ -102,9 +91,52 @@ jobs:
      - name: Apply SecretProviderClass (mount AWS secret bankapp/mysql)
        run: |
          kubectl apply -f infra/aws-csi/secretproviderclass.yaml
-     - name: Create ArgoCD Application for java-backend
+     - name: Install ArgoCD (with CRDs)
        run: |
-         kubectl apply -f infra/argocd/app-java-backend.yaml
+          echo "🔹 Creating argocd namespace (if missing)..."
+          kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+
+          echo "🔹 Installing ArgoCD components..."
+          kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+          echo "🔹 Waiting for ArgoCD pods to be ready..."
+          kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
+          kubectl wait --for=condition=available deployment/argocd-repo-server -n argocd --timeout=300s
+
+          echo "✅ ArgoCD is ready!"
+
+      # 4️⃣ Deploy the ArgoCD Application
+     - name: Deploy Java Backend ArgoCD Application
+       run: |
+          echo "🔹 Verifying CRDs..."
+          kubectl get crd applications.argoproj.io || \
+            (echo "❌ ArgoCD CRDs not found!" && exit 1)
+
+          echo "🔹 Applying Application manifest..."
+          kubectl apply -f infra/argocd/app-java-backend.yaml
+
+          echo "🔹 Verifying ArgoCD Application resource..."
+          kubectl get application java-backend -n argocd || true
+
+      # 5️⃣ Wait for ArgoCD Application sync
+     - name: Wait for Application Sync
+       run: |
+          echo "🔹 Waiting for ArgoCD Application sync..."
+          for i in {1..15}; do
+            STATUS=$(kubectl get application java-backend -n argocd -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "unknown")
+            HEALTH=$(kubectl get application java-backend -n argocd -o jsonpath='{.status.health.status}' 2>/dev/null || echo "unknown")
+            echo "Sync: $STATUS | Health: $HEALTH"
+            if [[ "$STATUS" == "Synced" && "$HEALTH" == "Healthy" ]]; then
+              echo "✅ Application is synced and healthy!"
+              exit 0
+            fi
+            echo "⏳ Waiting..."
+            sleep 20
+          done
+          echo "❌ Application did not reach Synced/Healthy state in time."
+          kubectl describe application java-backend -n argocd || true
+          exit 1
+          
      - name: Show pods
        run: |
          kubectl get pods --all-namespaces -o wide

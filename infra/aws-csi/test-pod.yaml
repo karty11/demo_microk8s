@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: aws-secret-test
+  namespace: default
+  labels:
+    app: aws-secret-test
+spec:
+  serviceAccountName: default
+  containers:
+    - name: busybox
+      image: busybox:stable
+      command: ["sh", "-c", "sleep 3600"]
+      volumeMounts:
+        - name: secrets-store
+          mountPath: "/mnt/secrets"
+          readOnly: true
+      envFrom:
+        - secretRef:
+            name: java-db-secret
+  volumes:
+    - name: secrets-store
+      csi:
+        driver: secrets-store.csi.k8s.io
+        readOnly: true
+        volumeAttributes:
+          secretProviderClass: "aws-secrets"

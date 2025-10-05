@@ -1,76 +1,59 @@
-name: CD - Deploy to microk8s
-runs-on: [self-hosted, k8s-deployer]
+name: CD - Deploy to microk8s (CSI + AWS Secrets)
 
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
 
-steps:
-- name: Checkout
-  uses: actions/checkout@v4
+jobs:
+  deploy:
+    runs-on: [self-hosted, k8s-deployer]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
+      - name: Ensure kubectl & helm available
+        run: |
+          kubectl version --client
+          helm version
 
-- name: Ensure kubectl is available
-  run: |
-   kubectl version --client
+      - name: Install Secrets Store CSI Driver
+        run: |
+          helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+          helm repo update
+          helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
+            --namespace kube-system --create-namespace \
+            --set enableSecretRotation=true \
+            --set rotationPollInterval="1h" \
+            --wait --timeout 5m
 
+      - name: Install AWS provider (ASCP)
+        run: |
+          helm repo add aws-secrets-manager https://aws.github.io/secrets-store-csi-driver-provider-aws
+          helm repo update
+          helm upgrade --install csi-secrets-provider-aws aws-secrets-manager/secrets-store-csi-driver-provider-aws \
+            --namespace kube-system \
+            --wait --timeout 5m
 
-- name: Ensure helm is available
-  run: |
-   helm version
+      - name: Create provider ServiceAccount & (fallback) AWS creds secret
+        run: |
+          # preferred: if running in EKS, create provider SA with IRSA annotation (manually configure IAM)
+          kubectl apply -f infra/aws-csi/sa-aws-provider.yaml
+          # fallback for microk8s: create secret (ensure values are provided via GitHub secrets or runner env)
+          # kubectl apply -f infra/aws-csi/aws-creds-secret.yaml   # uncomment if using secret-based creds
 
+      - name: Deploy MSSQL (dev/test)
+        run: |
+          kubectl apply -f infra/mssql/mssql-statefulset.yaml
 
-- name: Install / Upgrade ArgoCD into cluster
-  run: |
-   kubectl create ns argocd --dry-run=client -o yaml | kubectl apply -f -
-   helm repo add argo https://argoproj.github.io/argo-helm
-   helm repo update
-   helm upgrade --install argocd argo/argo-cd -n argocd \
-     --set server.service.type=ClusterIP \
-     --wait --timeout 5m
+      - name: Apply SecretProviderClass (pointing at your AWS secrets)
+        run: |
+          kubectl apply -f infra/aws-csi/secretproviderclass.yaml
 
+      - name: Create ArgoCD Application for java-backend (or apply helm directly)
+        run: |
+          kubectl apply -f infra/argocd/app-java-backend.yaml
 
-- name: Install External Secrets Operator (optional)
-  run: |
-   helm repo add external-secrets https://charts.external-secrets.io
-   helm repo update
-   kubectl create ns external-secrets --dry-run=client -o yaml | kubectl apply -f -
-   helm upgrade --install external-secrets external-secrets/external-secrets -n external-secrets --wait --timeout 5m
-
-
-- name: Install Vault (dev mode) using Helm
-  run: |
-    kubectl create ns vault --dry-run=client -o yaml | kubectl apply -f -
-    helm repo add hashicorp https://helm.releases.hashicorp.com
-    helm repo update
-    helm upgrade --install vault hashicorp/vault -n vault \
-     --wait --timeout 5m \
-     --values infra/vault/vault-helm-values.yaml
-
-
-- name: Deploy MSSQL for local dev
-  run: |
-    kubectl apply -f infra/mssql/mssql-statefulset.yaml
-
-
-- name: Create Vault root token secret (dev only) and run Vault init Job
-  run: |
-    # vault helm values sets devRootToken in a secret name `vault-root` in the vault ns
-    kubectl apply -f infra/vault/vault-token-secret.yaml || true
-    kubectl apply -f infra/vault/vault-init-job.yaml
-    # Wait for job completion
-    kubectl -n vault wait --for=condition=complete job/vault-init --timeout=120s || true
-    kubectl -n vault get job,vault,svc
-
-
-- name: Create ArgoCD Application for java-backend
-  run: |
-   kubectl apply -f infra/argocd/app-java-backend.yaml
-
-
-- name: Sync ArgoCD Application (force)
-  run: |
-    kubectl -n argocd run -i --rm argocd-cli --image=argoproj/argocd:v2.8.3 --restart=Never -- \
-
-  sh -c "argocd --help || true"
-
-- name: Show pods
-  run: |
-   kubectl get pods --all-namespaces -o wide
+      - name: Show pods
+        run: |
+          kubectl get pods --all-namespaces -o wide

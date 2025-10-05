@@ -9,10 +9,15 @@ jobs:
     steps:
      - name: Checkout
        uses: actions/checkout@v4
-     - name: Ensure kubectl & helm
+     - name: Install Helm manually (macOS)
        run: |
-         kubectl version --client
-         helm version
+         brew install helm
+   
+     - name: Verify Helm & Kubectl
+       run: |
+        kubectl version --client
+        helm version
+
      - name: Install Secrets Store CSI Driver
        run: |
          helm repo add secrets-store-csi-driver

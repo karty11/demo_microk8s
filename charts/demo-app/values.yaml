@@ -1,15 +1,24 @@
+replicaCount: 2
 image:
-  repository: docker.io/karty11/newbankapp
+  repository: myrepo/java-backend
   tag: latest
-  pullPolicy: Always
 
 service:
   type: ClusterIP
-  port: 80
-  targetPort: 8080
+  port: 8080
 
 ingress:
+  enabled: false
+  host: java-backend.local
+
+mssql:
+  host: mssql.mssql.svc.cluster.local
+  port: 1433
+  dbname: analytics
+
+secretName: mssql-db-secret
+
+vault:
   enabled: true
-  className: public
-  host: demo.local
-  path: /
+  dbRole: mssql-role
+  kvRole: web-role    # Vault Kubernetes auth role (see Vault setup)

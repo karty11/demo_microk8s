@@ -26,9 +26,26 @@ spec:
             - name: ACCEPT_EULA
               value: "Y"
             - name: SA_PASSWORD
-              value: "YourStrong!Passw0rd"
+              valueFrom:
+                secretKeyRef:
+                  name: mssql-sa-secret
+                  key: SA_PASSWORD
           ports:
             - containerPort: 1433
+          readinessProbe:
+            # simple TCP probe to port 1433
+            tcpSocket:
+              port: 1433
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
           volumeMounts:
             - name: mssqldata
               mountPath: /var/opt/mssql
@@ -47,6 +64,7 @@ metadata:
   name: mssql
   namespace: mssql
 spec:
+  clusterIP: None
   ports:
     - port: 1433
       name: mssql

@@ -35,6 +35,14 @@ jobs:
 
         helm upgrade --install csi-secrets-provider-aws aws-secrets-manager/secrets-store-csi-driver-provider-aws \
          --namespace kube-system --wait --timeout 5m
+     
+     - name: Install Stakater Reloader
+       run: |
+         helm repo add stakater https://stakater.github.io/stakater-helm3
+         helm repo update
+         helm upgrade --install reloader stakater/reloader \
+          --namespace kube-system --create-namespace \
+          --wait --timeout 5m    
          
      - name: Create provider ServiceAccount & (fallback) AWS creds secret
        run: |

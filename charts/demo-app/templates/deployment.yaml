@@ -1,37 +1,40 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-name: {{ include "java-backend.fullname" . }}
-labels:
-app: {{ include "java-backend.name" . }}
+  name: {{ include "java-backend.fullname" . }}
+  labels:
+    app: {{ include "java-backend.name" . }}
 spec:
-replicas: {{ .Values.replicaCount }}
-selector:
-matchLabels:
-app: {{ include "java-backend.name" . }}
-template:
-metadata:
-labels:
-app: {{ include "java-backend.name" . }}
-spec:
-serviceAccountName: java-backend-sa
-containers:
-- name: java-backend
-image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-imagePullPolicy: {{ .Values.image.pullPolicy }}
-ports:
-- containerPort: 8080
-envFrom:
-- secretRef:
-name: java-db-secret
-volumeMounts:
-- name: secrets-store
-mountPath: /mnt/secrets
-readOnly: true
-volumes:
-- name: secrets-store
-csi:
-driver: secrets-store.csi.k8s.io
-readOnly: true
-volumeAttributes:
-secretProviderClass: "aws-secrets"
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "java-backend.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "java-backend.name" . }}
+      annotations:
+        reloader.stakater.com/auto: "true"
+        reloader.stakater.com/secret: "java-db-secret"
+    spec:
+      serviceAccountName: java-backend-sa
+      containers:
+        - name: java-backend
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: java-db-secret
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /mnt/secrets
+              readOnly: true
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: "aws-secrets"

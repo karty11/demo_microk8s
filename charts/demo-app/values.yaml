@@ -20,7 +20,7 @@ mssql:
   annotations:
     kubernetes.io/ingress.class: nginx
   hosts:
-    - host: java-backend.local
+    - host: java-backend.192.168.2.5.nip.io
       paths:
         - path: /
           pathType: Prefix

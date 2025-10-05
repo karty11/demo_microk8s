@@ -10,10 +10,10 @@ type: ClusterIP
 port: 8080
 
 
-vault:
-enabled: true
-dbRole: mssql-role
-k8sRole: java-backend-role
+mssql:
+host: mssql.mssql.svc.cluster.local
+port: 1433
+dbname: analytics
 
 
 resources: {}

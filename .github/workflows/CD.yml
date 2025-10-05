@@ -1,59 +1,57 @@
 name: CD - Deploy to microk8s (CSI + AWS Secrets)
 
 on:
-  push:
-    branches: [ main ]
-  workflow_dispatch: {}
+  workflow_dispatch:  # <-- manual trigger only
 
 jobs:
   deploy:
-    runs-on: [self-hosted, k8s-deployer]
+    runs-on: self-hosted
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+     - name: Checkout
+       uses: actions/checkout@v4
+     - name: Ensure kubectl & helm
+       run: |
+         kubectl version --client
+         helm version
+     - name: Install Secrets Store CSI Driver
+       run: |
+         helm repo add secrets-store-csi-driver
+         https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
 
-      - name: Ensure kubectl & helm available
-        run: |
-          kubectl version --client
-          helm version
+         helm repo update
 
-      - name: Install Secrets Store CSI Driver
-        run: |
-          helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
-          helm repo update
-          helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
-            --namespace kube-system --create-namespace \
-            --set enableSecretRotation=true \
-            --set rotationPollInterval="1h" \
-            --wait --timeout 5m
+         helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
+          --namespace kube-system --create-namespace \
+          --set enableSecretRotation=true \
+          --set rotationPollInterval="1h" \
+          --wait --timeout 5m
+          
+     - name: Install AWS provider (ASCP)
+       run: |
+        helm repo add aws-secrets-manager
+        https://aws.github.io/secrets-store-csi-driver-provider-aws
 
-      - name: Install AWS provider (ASCP)
-        run: |
-          helm repo add aws-secrets-manager https://aws.github.io/secrets-store-csi-driver-provider-aws
-          helm repo update
-          helm upgrade --install csi-secrets-provider-aws aws-secrets-manager/secrets-store-csi-driver-provider-aws \
-            --namespace kube-system \
-            --wait --timeout 5m
+        helm repo update
 
-      - name: Create provider ServiceAccount & (fallback) AWS creds secret
-        run: |
-          # preferred: if running in EKS, create provider SA with IRSA annotation (manually configure IAM)
-          kubectl apply -f infra/aws-csi/sa-aws-provider.yaml
-          # fallback for microk8s: create secret (ensure values are provided via GitHub secrets or runner env)
-          # kubectl apply -f infra/aws-csi/aws-creds-secret.yaml   # uncomment if using secret-based creds
+        helm upgrade --install csi-secrets-provider-aws aws-secrets-manager/secrets-store-csi-driver-provider-aws \
+         --namespace kube-system --wait --timeout 5m
+         
+     - name: Create provider ServiceAccount & (fallback) AWS creds secret
+       run: |
+        kubectl apply -f infra/aws-csi/sa-aws-provider.yaml
 
-      - name: Deploy MSSQL (dev/test)
-        run: |
-          kubectl apply -f infra/mssql/mssql-statefulset.yaml
+      # If running outside EKS, optionally create aws-creds secret (DO NOT store real creds in repo)
 
-      - name: Apply SecretProviderClass (pointing at your AWS secrets)
-        run: |
-          kubectl apply -f infra/aws-csi/secretproviderclass.yaml
-
-      - name: Create ArgoCD Application for java-backend (or apply helm directly)
-        run: |
-          kubectl apply -f infra/argocd/app-java-backend.yaml
-
-      - name: Show pods
-        run: |
-          kubectl get pods --all-namespaces -o wide
+      # kubectl apply -f infra/aws-csi/aws-creds-secret-example.yaml
+     - name: Deploy MSSQL (dev/test)
+       run: |
+        kubectl apply -f infra/mssql/mssql-statefulset.yaml
+     - name: Apply SecretProviderClass (mount AWS secret bankapp/mysql)
+       run: |
+         kubectl apply -f infra/aws-csi/secretproviderclass.yaml
+     - name: Create ArgoCD Application for java-backend
+       run: |
+         kubectl apply -f infra/argocd/app-java-backend.yaml
+     - name: Show pods
+       run: |
+         kubectl get pods --all-namespaces -o wide

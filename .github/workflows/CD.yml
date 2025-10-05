@@ -18,18 +18,17 @@ jobs:
         kubectl version --client
         helm version
 
-     - name: Install Secrets Store CSI Driver
+     - name: Install CSI Secrets Store Driver
        run: |
-         helm repo add secrets-store-csi-driver
-         https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+        helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+        helm repo update
 
-         helm repo update
+        helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
+         --namespace kube-system --create-namespace \
+         --set enableSecretRotation=true \
+         --set rotationPollInterval="1h" \
+         --wait --timeout 5m
 
-         helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
-          --namespace kube-system --create-namespace \
-          --set enableSecretRotation=true \
-          --set rotationPollInterval="1h" \
-          --wait --timeout 5m
           
      - name: Install AWS provider (ASCP)
        run: |

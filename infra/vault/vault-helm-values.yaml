@@ -1,8 +1,0 @@
-server:
-dev:
-enabled: true
-devRootToken: root
-extraEnvironmentVars:
-VAULT_TELEMETRY: ""
-injector:
-enabled: true
